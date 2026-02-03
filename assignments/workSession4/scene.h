@@ -3,6 +3,7 @@
 // batteries
 #include "batteries/scene.h"
 #include "batteries/lights.h"
+#include "batteries/materials.h"
 
 // ew
 #include "ew/model.h"
@@ -21,7 +22,18 @@ class Scene final : public batteries::Scene
 
   private:
     std::unique_ptr<ew::Model> suzanne;
-    std::unique_ptr<ew::Shader> blinnphong;
+    std::unique_ptr<ew::Shader> toon;
+    std::unique_ptr<ew::Texture> skullTexture;
 
     batteries::light_t light;
+    batteries::material_t material;
+
+    struct {
+      glm::vec3 color1;
+      glm::vec3 color2;
+    } palette;
+
+    unsigned int fbo;
+    unsigned int fboTexture;
+
 };

@@ -68,10 +68,6 @@ void Scene::Render(void)
     blinnphong->setVec3("Material.shinniness", light.color);
 
 
-    // Call texture bindings before draw
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE0)
-
     // draw suzanne
     suzanne->draw();
 }
