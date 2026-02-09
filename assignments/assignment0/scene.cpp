@@ -15,14 +15,23 @@ struct {
     float alpha = 128.0f;
 } debug;
 
+
+
 Scene::Scene()
 {
     suzanne = std::make_unique<ew::Model>("assets/models/suzanne.obj");
-    blinnphong = std::make_unique<ew::Shader>("assets/shaders/default.vs", "assets/shaders/blinnphong.fs");
+    blinnphong = std::make_unique<ew::Shader>("assets/shaders/blinnphong.vs", "assets/shaders/blinnphong.fs");
+    texture = std::make_unique<ew::Texture>("assets/textures/Txo_dokuo.png");
 
-    // light = { 
-    //     .color = {1.0f, 0.0f, 2.0f}, }
-    //     .position = {2.0f, 2.0f, 2.0f}, 
+     light = {  
+         .color = {1.0f, 0.0f, 2.0f}, 
+         .position = {2.0f, 2.0f, 2.0f}, 
+     };
+
+     ambient = {
+        .intensity = 1.0f,
+        .color = {0.5,0.5,0.5},
+     };
 }
 
 Scene::~Scene()
@@ -49,13 +58,20 @@ void Scene::Render(void)
     glEnable(GL_DEPTH_TEST);
     // glDisable(GL_DEPTH_TEST);
 
+    // Set Texture
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture->getID());
+
     blinnphong->use();
+
+    // Sample the texture
+    blinnphong->setInt("texture0", 0);
 
     // scene matrices
     blinnphong->setMat4("model", glm::mat4(1.0f));
     blinnphong->setMat4("view_proj", view_proj);
 
-    blinnphong->setVec3("camera", camera.position);
+    blinnphong->setVec3("cameraPosition", camera.position);
     blinnphong->setVec3("light", light.position);
     blinnphong->setVec3("light_color", light.color);
 

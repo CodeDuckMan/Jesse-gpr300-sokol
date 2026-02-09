@@ -7,15 +7,18 @@ out vec4 FragColor;
 struct Light {
   vec3 color;
   vec3 position;
+};
 
-
+struct Ambient {
+  vec3 color;
+  vec3 position;
 };
 
 struct Material{
   vec3 ambient;
-  vec3 deffuse;
+  vec3 diffuse;
   vec3 specular;
-  vec3 shinniness;
+  float shinniness;
 };
 
 // varyings
@@ -24,7 +27,8 @@ in vec3 vs_normal;
 in vec2 vs_texcoord;
 
 // uniforms
-uniform vec3 camera;
+uniform sampler2D texture0;
+uniform vec3 cameraPosition;
 uniform vec3 light;
 uniform vec3 light_color;
 // uniform float alpha; - moved to matierial
@@ -34,14 +38,16 @@ uniform vec3 light_color;
 vec3 blinnphong (vec3 normal, vec3 frag_position, vec3 light_pos) {
 
 
-// replace the light_
-
-
-vec3 view_dir = normalize(camera - frag_position);
+// Normalise inputs
+vec3 view_dir = normalize(cameraPosition - frag_position);
 vec3 light_dir = normalize(light_pos - frag_position);
-vec3 reflect_dir = reflect(light_dir, vs_normal);
 vec3 half_dir =  normalize(light_dir + view_dir);
 
+vec3 reflect_dir = reflect(light_dir, vs_normal);
+
+// Dot products
+float nDotL = max(dot(normal, light_dir), 0);
+float nDotH = max(dot(normal, half_dir), 0);
 
 // Iinstead of diffues use material properties
 
@@ -54,13 +60,18 @@ vec3 half_dir =  normalize(light_dir + view_dir);
 // float NdotL = max(dot(normal, light_dir), 0.0);
 // float NdotH = max(dot(normal, light_dir), 0.0);
 
+// Components
+
+// vec3 diffuse = (nDotL * material.diffuse);
+// vec3 specular = pow(ndoth, material.shinniness * 128 ) * material.specular;
+
 float PdotL = dot(frag_position, light_pos.xyz);
 
 return normalize(vec3(PdotL));
 // return light_dir_ * light_color;
-// return vce3(deffuse * light_color);
+// return vce3(diffuse * light_color);
 
-// deffuse = NdotL * material.deffuse;
+// diffuse = NdotL * material.diffuse;
 // 
 }
 
