@@ -15,10 +15,6 @@ struct {
     float alpha = 128.0f;
 } debug;
 
-
-
-
-
 Scene::Scene()
 {
     suzanne = std::make_unique<ew::Model>("assets/models/suzanne.obj");
@@ -28,43 +24,26 @@ Scene::Scene()
     //     .color = {1.0f, 0.0f, 2.0f}, }
     //     .position = {2.0f, 2.0f, 2.0f}, 
 
-
     palette = {
         .color1{1.0f, 1.0f, 1.0f},
         .color2{0.0f, 0.0f, 0.0f},
     };
 
     // // frame buffer setup
-    glCreateFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    
-    {
-        glGenTextures(1, &fboTexture);
-        glBindTexture(GL_TEXTURE_2D, fboTexture);
-
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-        
-
-
-
-
-    }
-   
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, NULL);
-
-    if( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-    {
-        printf("Framebuffer not complete");
-    }
-
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-
-
+    // glCreateFramebuffers(1, &fbo);
+    // glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    // {
+    //     glGenTextures(1, &fboTexture);
+    //     glBindTexture(GL_TEXTURE_2D, fboTexture);
+    //     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    // }
+    // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, NULL);
+    // if( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    // {
+    //     printf("Framebuffer not complete");
+    // }
+    // glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
-
-
 
 Scene::~Scene()
 {

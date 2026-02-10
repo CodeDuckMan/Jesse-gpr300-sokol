@@ -38,41 +38,36 @@ uniform vec3 light_color;
 vec3 blinnphong (vec3 normal, vec3 frag_position, vec3 light_pos) {
 
 
-// Normalise inputs
-vec3 view_dir = normalize(cameraPosition - frag_position);
-vec3 light_dir = normalize(light_pos - frag_position);
-vec3 half_dir =  normalize(light_dir + view_dir);
+  // Normalise inputs
+  vec3 view_dir = normalize(cameraPosition - frag_position);
+  vec3 light_dir = normalize(light_pos - frag_position);
+  vec3 half_dir =  normalize(light_dir + view_dir);
+  vec3 reflect_dir = reflect(light_dir, vs_normal);
 
-vec3 reflect_dir = reflect(light_dir, vs_normal);
+  // Dot products
+  float nDotL = max(dot(normal, light_dir), 0);
+  float nDotH = max(dot(normal, half_dir), 0);
 
-// Dot products
-float nDotL = max(dot(normal, light_dir), 0);
-float nDotH = max(dot(normal, half_dir), 0);
+  // Iinstead of diffues use material properties
+  // float diffuse = max(dot(normal, light_dir), 0.0);
+  // float specular = vec3(0,0);
+  // float lighting = vec3(diffuse) + vec3(specular);
+  // float lighting = vec3(pow(specular, 128.0));
+  // float lighting = vec3(pow(specular, 128.0));
 
-// Iinstead of diffues use material properties
+  // Components
 
-// float diffuse = max(dot(normal, light_dir), 0.0);
-// float specular = vec3(0,0);
-// float lighting = vec3(diffuse) + vec3(specular);
-// float lighting = vec3(pow(specular, 128.0));
-// float lighting = vec3(pow(specular, 128.0));
+  // vec3 diffuse = (nDotL * material.diffuse);
+  // vec3 specular = pow(ndoth, material.shinniness * 128 ) * material.specular;
 
-// float NdotL = max(dot(normal, light_dir), 0.0);
-// float NdotH = max(dot(normal, light_dir), 0.0);
+  float PdotL = dot(frag_position, light_pos.xyz);
 
-// Components
+  return normalize(vec3(PdotL));
+  // return light_dir_ * light_color;
+  // return vce3(diffuse * light_color);
 
-// vec3 diffuse = (nDotL * material.diffuse);
-// vec3 specular = pow(ndoth, material.shinniness * 128 ) * material.specular;
-
-float PdotL = dot(frag_position, light_pos.xyz);
-
-return normalize(vec3(PdotL));
-// return light_dir_ * light_color;
-// return vce3(diffuse * light_color);
-
-// diffuse = NdotL * material.diffuse;
-// 
+  // diffuse = NdotL * material.diffuse;
+  // 
 }
 
 
