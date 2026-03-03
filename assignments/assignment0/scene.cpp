@@ -19,7 +19,7 @@ struct {
 
 Scene::Scene()
 {
-    suzanne = std::make_unique<ew::Model>("assets/models/suzanne.obj");
+    skull = std::make_unique<ew::Model>("assets/models/skull.obj");
     blinnphong = std::make_unique<ew::Shader>("assets/shaders/blinnphong.vs", "assets/shaders/blinnphong.fs");
     texture = std::make_unique<ew::Texture>("assets/textures/Txo_dokuo.png");
 
@@ -32,6 +32,9 @@ Scene::Scene()
         .intensity = 1.0f,
         .color = {0.5,0.5,0.5},
      };
+
+     
+
 }
 
 Scene::~Scene()
@@ -72,20 +75,17 @@ void Scene::Render(void)
     blinnphong->setMat4("view_proj", view_proj);
 
     blinnphong->setVec3("cameraPosition", camera.position);
-    blinnphong->setVec3("light", light.position);
+    blinnphong->setVec3("lightPosition", light.position);
     blinnphong->setVec3("light_color", light.color);
 
-    blinnphong->setVec3("Light.color", light.color);
-    blinnphong->setVec3("Light.position", light.position);
+    blinnphong->setVec3("lightStruct.color", light.color);
+    blinnphong->setVec3("lightStruct.position", light.position);
+
     
-    blinnphong->setVec3("Material.ambient", light.color);
-    blinnphong->setVec3("Material.deffuse", light.position);
-    blinnphong->setVec3("Material.specular", light.color);
-    blinnphong->setVec3("Material.shinniness", light.color);
 
 
-    // draw suzanne
-    suzanne->draw();
+    // draw skull
+    skull->draw();
 }
 
 void Scene::Debug(void)
@@ -121,8 +121,8 @@ void Scene::Debug(void)
 
     ImGui::Checkbox("Paused", &time.paused);
     ImGui::SliderFloat("Time Factor", &time.factor, 0.0f, 10.0f);
-
-    //Imgui::DragFloat("Alpha", &debug.alpha, 1, 100);
+    //ImGui::DragFloat("Alpha", &debug.alpha, 1, 100);
+    //ImGui::ColorEdit3("Light Color", &light.color.r);
     //Imgui::ColorEdit3("Light Color:", &light.color);
 
     /* build debug ui here */
@@ -131,7 +131,7 @@ void Scene::Debug(void)
 }
 // Scene::Scene()
 // {
-//     suzanne = std::make_unique<ew::Model>("assets/models/suzanne.obj");
+//     skull = std::make_unique<ew::Model>("assets/models/skull.obj");
 //     blinnphong = std::make_unique<ew::Shader>("assets/shaders/default.vs", "assets/shaders/blinnphong.fs");
 
 //     // light = { 
@@ -182,8 +182,8 @@ void Scene::Debug(void)
 //     blinnphong->setVec3("Material.specular", light.color);
 //     blinnphong->setVec3("Material.shinniness", light.color);
 
-//     // draw suzanne
-//     suzanne->draw();
+//     // draw skull
+//     skull->draw();
 // }
 
 // void Scene::Debug(void)

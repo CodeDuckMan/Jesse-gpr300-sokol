@@ -3,13 +3,13 @@
 // batteries
 #include "batteries/scene.h"
 #include "batteries/lights.h"
+#include "batteries/materials.h"
 
 // ew
 #include "ew/model.h"
+#include "ew/mesh.h"
 #include "ew/shader.h"
 #include "ew/texture.h"
-
-#include "batteries/opengl.h"
 
 class Scene final : public batteries::Scene
 {
@@ -22,15 +22,17 @@ class Scene final : public batteries::Scene
     void Debug(void);
 
   private:
-    std::unique_ptr<ew::Model> skull;
-    std::unique_ptr<ew::Shader> blinnphong;
-    std::unique_ptr<ew::Shader> postprocess;
-    std::unique_ptr<ew::Texture> texture;
+    std::unique_ptr<ew::Shader> water;
+
+    
+    std::unique_ptr<ew::Texture> wave_spec; // mimap0
+    std::unique_ptr<ew::Texture> wave_tex; // mimap1
+    std::unique_ptr<ew::Texture> wave_warp; // mimap2
+
+
+    ew::Mesh plane;
 
     batteries::ambient_t ambient;
     batteries::light_t light;
-
-    GLuint fbo;
-    GLuint fbo_color0;
-    GLuint fbo_depth;
+    batteries::material_t material;
 };

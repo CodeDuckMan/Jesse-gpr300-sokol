@@ -59,6 +59,10 @@ void Scene::Update(float dt)
 
 void Scene::Render(void)
 {
+
+
+
+    
     const auto view_proj = camera.Projection() * camera.View();
 
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);

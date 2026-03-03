@@ -10,6 +10,28 @@
 
 // batteries
 #include "batteries/opengl.h"
+struct
+{
+    int index = 0;
+
+    struct
+    {
+        float strength = 16.0f;
+    } blur;
+
+    struct
+    {
+        glm::vec3 offset = glm::vec3(0.009f, 0.006f, -0.006f);
+        glm::vec2 direction = glm::vec2(1.0f);
+    } chromatic;
+
+    struct
+    {
+        int x = 800;
+        int y = 600;
+    } window;
+
+} settings;
 
 struct FullScreenQuad
 {
@@ -50,26 +72,55 @@ struct FullScreenQuad
 
         // always last.
         glBindVertexArray(0);
+
+
     }
 };
 
 FullScreenQuad fullscreen_quad;
 
-struct {
-    float alpha = 128.0f;
-    float strength = 16.0f;
-} debug;
+struct FrameBuffer
+{
+    GLuint fbo;
+    GLuint color0;
+    GLuint color1;
+    GLuint depth;
+    
+    void Initialize()
+    {
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    // create a color attachment texture
+    unsigned int color0;
+    glGenTextures(1, &color0);
+    glBindTexture(GL_TEXTURE_2D, color0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, settings.window.x, settings.window.y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color0, 0);
+    
+    // create a renderbuffer object for depth and stencil attachment (we won't be sampling these)
+    unsigned int depth;
+    glGenRenderbuffers(1, &depth);
+    glBindRenderbuffer(GL_RENDERBUFFER, depth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, settings.window.x, settings.window.y); // use a single renderbuffer object for both a depth AND stencil buffer.
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depth);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        printf("ERROR::FRAMEBUFFER:: Framebuffer is not complete!");
+        
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    }
+};
 
 
 Scene::Scene()
 {
-    suzanne = std::make_unique<ew::Model>("assets/models/suzanne.obj");
+    skull = std::make_unique<ew::Model>("assets/models/skull.obj");
     blinnphong = std::make_unique<ew::Shader>("assets/shaders/blinnphong.vs", "assets/shaders/blinnphong.fs");
     texture = std::make_unique<ew::Texture>("assets/textures/Txo_dokuo.png");
-
-    postprocess = std::make_unique<ew::Shader>("assets/shaders/fullscreen.vs", "assets/shaders/blur.fs");
-    // postprocess = std::make_unique<ew::Shader>("assets/shaders/fullscreen.vs", "assets/shaders/grayscale.fs");
-    // postprocess = std::make_unique<ew::Shader>("assets/shaders/fullscreen.vs", "assets/shaders/inverse.fs");
 
      light = {  
          .color = {1.0f, 0.0f, 2.0f}, 
@@ -81,14 +132,14 @@ Scene::Scene()
         .color = {0.5,0.5,0.5},
      };
 
-     fullscreen_quad.Initialize();
+     
 
      // create fbo
      // https://learnopengl.com/Advanced-OpenGL/Framebuffers
-     // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, settings.window.x, settings.window.y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
      // Do not Render buffer objects. Create a color texture and then a depth texture
-     // glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, 800, 600, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_28_8, NULL);
-}
+     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, settings.window.x, settings.window.y, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+};
 
 Scene::~Scene()
 {
@@ -132,32 +183,26 @@ void Scene::Render(void)
         blinnphong->setMat4("view_proj", view_proj);
 
         blinnphong->setVec3("cameraPosition", camera.position);
-
-        // FIXME: here
-        blinnphong->setVec3("light", light.position);
+        blinnphong->setVec3("lightPosition", light.position);
         blinnphong->setVec3("light_color", light.color);
-        blinnphong->setVec3("Light.color", light.color);
-        blinnphong->setVec3("Light.position", light.position);
-        
-        blinnphong->setVec3("Material.ambient", light.color);
-        blinnphong->setVec3("Material.deffuse", light.position);
-        blinnphong->setVec3("Material.specular", light.color);
-        blinnphong->setVec3("Material.shinniness", light.color);
+
+        blinnphong->setVec3("lightStruct.color", light.color);
+        blinnphong->setVec3("lightStruct.position", light.position);
 
         // draw suzanne
-        suzanne->draw();        
+        skull->draw();        
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // Postprocessing
     {
-        postprocess->use();
-        postprocess->setInt("screen", 0);
+        //postprocess->use();
+        //postprocess->setInt("screen", 0);
 
         // Fullscreen pipeline
         glDisable(GL_DEPTH_TEST);
 
-        // default frame vuffer
+        // default frame buffer
         glClearColor(1.0f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 

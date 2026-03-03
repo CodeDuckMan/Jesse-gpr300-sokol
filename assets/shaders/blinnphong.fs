@@ -14,7 +14,7 @@ struct Ambient {
   vec3 position;
 };
 
-struct Material{
+struct MaterialProperties {
   vec3 ambient;
   vec3 diffuse;
   vec3 specular;
@@ -29,24 +29,43 @@ in vec2 vs_texcoord;
 // uniforms
 uniform sampler2D texture0;
 uniform vec3 cameraPosition;
-uniform vec3 light;
+uniform vec3 lightPosition;
 uniform vec3 light_color;
+
+uniform Light lightStruct;
+
 // uniform float alpha; - moved to matierial
 // uniform Material material;
 
 
 vec3 blinnphong (vec3 normal, vec3 frag_position, vec3 light_pos) {
 
+  vec3 textureColor = texture(texture0, vs_texcoord).rgb;
 
+  // Ambient
+  vec3 ambient = 0.05 * textureColor;
+
+  // Diffuse
+  vec3 light_dir = normalize(light_pos - frag_position);
+  vec3 difNormal = normalize(normal);
+
+  float diff = max(dot(light_dir, difNormal), 0.0);
+  vec3 diffuse = diff * textureColor;
+
+  // Specular
   // Normalise inputs
   vec3 view_dir = normalize(cameraPosition - frag_position);
-  vec3 light_dir = normalize(light_pos - frag_position);
-  vec3 half_dir =  normalize(light_dir + view_dir);
   vec3 reflect_dir = reflect(light_dir, vs_normal);
 
+  // Blinnphong part
+  vec3 half_dir = normalize(light_dir + view_dir);
+  float spec = pow(max(dot(normal, half_dir), 0.0), 32.0);
+
+  // Stuff from before 
+  // -----------------------------------------------------------------------
   // Dot products
-  float nDotL = max(dot(normal, light_dir), 0);
-  float nDotH = max(dot(normal, half_dir), 0);
+  //float nDotL = max(dot(normal, light_dir), 0);
+  //float nDotH = max(dot(normal, half_dir), 0);
 
   // Iinstead of diffues use material properties
   // float diffuse = max(dot(normal, light_dir), 0.0);
@@ -60,20 +79,24 @@ vec3 blinnphong (vec3 normal, vec3 frag_position, vec3 light_pos) {
   // vec3 diffuse = (nDotL * material.diffuse);
   // vec3 specular = pow(ndoth, material.shinniness * 128 ) * material.specular;
 
-  float PdotL = dot(frag_position, light_pos.xyz);
+  // float PdotL = dot(frag_position, light_pos.xyz);
+  
 
-  return normalize(vec3(PdotL));
+  // return normalize(vec3(PdotL));
   // return light_dir_ * light_color;
   // return vce3(diffuse * light_color);
 
   // diffuse = NdotL * material.diffuse;
-  // 
+  // -----------------------------------------------------------------------
+    vec3 specular = vec3(0.3) * spec;
+    return (ambient + diffuse + specular);
+
 }
 
 
 void main()
 {
-  vec3 lighting = blinnphong(vs_normal, vs_position, light);
+  vec3 lighting = blinnphong(vs_normal, vs_position, lightPosition);
   // vec3 lighting = blinnphong(vs_normal, vs_position, light) + ambient * 0.5;
   // vec3 object_color = vs_normal.rbg * 0.5 + 0.5;
   // vec3 ambient = vec3(1.0);

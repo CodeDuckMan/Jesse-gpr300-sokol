@@ -9,6 +9,7 @@
 #include "ew/shader.h"
 #include "ew/texture.h"
 
+
 class Scene final : public batteries::Scene
 {
   public:
@@ -20,10 +21,11 @@ class Scene final : public batteries::Scene
     void Debug(void);
 
   private:
-    std::unique_ptr<ew::Model> suzanne;
+    std::unique_ptr<ew::Model> skull;
     std::unique_ptr<ew::Shader> blinnphong;
     std::unique_ptr<ew::Texture> texture;
 
     batteries::ambient_t ambient;
     batteries::light_t light;
+
 };
