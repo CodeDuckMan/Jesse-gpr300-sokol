@@ -29,10 +29,6 @@ class Scene final : public batteries::Scene
 
     std::unique_ptr<ew::Shader> blinnphong;
     std::unique_ptr<ew::Shader> fullscreen; // Put on timeout for turning the world red
-    // std::unique_ptr<ew::Shader> inverse;
-    // std::unique_ptr<ew::Shader> grescale;
-    // std::unique_ptr<ew::Shader> blur;
-    // std::unique_ptr<ew::Shader> edges;
 
     std::vector<std::unique_ptr<ew::Shader>> postProcessingEffects;
     batteries::ambient_t ambient;

@@ -1,4 +1,5 @@
 #include "scene.h"
+
 // imgui
 #include "imgui/imgui.h"
 #include "imguizmo/imguizmo.h"
@@ -10,30 +11,14 @@
 // batteries
 #include "batteries/opengl.h"
 
-enum
-{
-    NoEffect = 0,
-    BlurEffect = 1,
-    InverseEffect = 2,
-    GrayscaleEffect = 3,
-    EdgeEffect = 4,
-    PixelEffect = 5,
-    SharpenEffect = 6,
-    GlitchEffect = 7,
-};
-
 struct
 {
     int index = 0;
     int currentPostProc = 0;
     float blurStrength = 16.0f;
+    float spawnArea = 3;
+    float spacing = 1;
 
-    float offset[3] = {0.08, 0.06, -0.04};
-    float rDirect[2] = {1.0, 1.0};
-    float gDirect[2] = {1.0, 1.0};
-    float bDirect[2] = {1.0, 1.0};
-    
-    clock_t programStart;
     struct
     {
         glm::vec3 offset = glm::vec3(0.009f, 0.006f, -0.006f);
@@ -46,6 +31,8 @@ struct
         int y = 600;
     } window;
 
+    
+
 } settings;
 
     static std::vector<std::string> postProcessingNames =
@@ -55,9 +42,6 @@ struct
         "Inverse",
         "Greyscle",
         "Edges",
-        "Pixelation",
-        "Sharpen",
-        "Glitch"
     };
 
 struct FullScreenQuad
@@ -121,7 +105,7 @@ struct FrameBuffer
     // create a color attachment texture
     glGenTextures(1, &color0);
     glBindTexture(GL_TEXTURE_2D, color0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, settings.window.x, settings.window.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, settings.window.x, settings.window.y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color0, 0);
@@ -160,21 +144,16 @@ void doPostProcess(ew::Shader* shader)
     shader->use();
     shader->setInt("texture0", 0);
 
-    switch (settings.currentPostProc)
+    if (settings.currentPostProc == 1)
     {
-    case BlurEffect:
         shader->setFloat("strength", settings.blurStrength);
-        break;
-    
-    default:
-        break;
     }
 
     // Disable depth test
     glDisable(GL_DEPTH_TEST);
 
     // Clear buffer
-    glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // Draw 
@@ -184,11 +163,25 @@ void doPostProcess(ew::Shader* shader)
     glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
+void CacheInstanceData()
+{
+    auto i = 0;
+
+    auto width = settings.spawnArea;
+    auto size = (width - (-width) + 1) * (width - (width) + 1);
+
+    for (auto x = -settings.spawnArea; x <= settings.spawnArea; x++)
+    {
+        for (auto y = -settings.spawnArea; y <= settings.spawnArea; y++, i++)
+        {
+            auto position = glm::vec3(x * settings.spacing, 0, y * settings.spacing, 0);
+            auto matrix = glm::translate(glm::mat4(1.0f), position);
+        }
+    }
+}
 
 Scene::Scene()
 {
-    
-    settings.programStart = clock();
     skull = std::make_unique<ew::Model>("assets/models/skull.obj");
     blinnphong = std::make_unique<ew::Shader>("assets/shaders/blinnphong.vs", "assets/shaders/blinnphong.fs");
     texture = std::make_unique<ew::Texture>("assets/textures/Txo_dokuo.png");
@@ -198,14 +191,11 @@ Scene::Scene()
     // grescale = std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/greyscale.fs");
     // inverse = std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/inverse.fs");
     
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/postprocessing/fullscreen.vs", "assets/shaders/postprocessing/default.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/blur.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/inverse.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/greyscale.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/edges.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/pixelation.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/sharpen.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/glitch.fs"));
+    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/postprocessing/default.vs", "assets/shaders/postprocessing/default.fs"));
+    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/blur.fs"));
+    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/edges.fs"));
+    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/greyscale.fs"));
+    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/inverse.fs"));
     //fullscreen = std::make_unique<ew::Shader>("assets/shaders/fullscreen.vs", "assets/shaders/fullscreen.fs");
     
     light = {  
@@ -239,7 +229,7 @@ Scene::~Scene()
 void Scene::Update(float dt)
 {
     batteries::Scene::Update(dt);
-    
+
     /* body */
 }
 
@@ -248,7 +238,7 @@ void Scene::Render(void)
 {
     const auto view_proj = camera.Projection() * camera.View();
 
-    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     {   // Framebuffer
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -281,46 +271,41 @@ void Scene::Render(void)
 
         // Draw
         skull->draw();
+        
+        auto i = 0;
+    for (auto x = -settings.spawnArea; x <= settings.spawnArea; x++)
+    {
+        for (auto y = -settings.spawnArea; y <= settings.spawnArea; y++, i++)
+        {
+            auto position = glm::vec3(x * settings.spacing, 0, y * settings.spacing, 0);
+            auto matrix = glm::translate(glm::mat4(1.0f), position);
+        }
+    }
 
+        doPostProcess(postProcessingEffects[settings.currentPostProc].get());
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // Postprocessing
 
-    // doPostProcess(postProcessingEffects[settings.currentPostProc].get());
-    
     // Smaller fullscrean window
-    {
-        auto fullscreen = postProcessingEffects[settings.currentPostProc].get();
-        fullscreen->use();
-        fullscreen->setInt("screen", 0);
-        
-        if (settings.currentPostProc == GlitchEffect) {
-        fullscreen->setFloat("time", (float)time.absolute);
-        fullscreen->setFloat("offsetX", settings.offset[0]);
-        fullscreen->setFloat("offsetY", settings.offset[1]);
-        fullscreen->setFloat("offsetZ", settings.offset[2]);
-        fullscreen->setFloat("rDirectionX", settings.rDirect[0]);
-        fullscreen->setFloat("rDirectionY", settings.rDirect[1]);
-        fullscreen->setFloat("gDirectionX", settings.gDirect[0]);
-        fullscreen->setFloat("gDirectionY", settings.gDirect[1]);
-        fullscreen->setFloat("bDirectionX", settings.bDirect[0]);
-        fullscreen->setFloat("bDirectionY", settings.bDirect[1]);
+    // {
+    //     fullscreen->use();
+    //     fullscreen->setInt("screen", 0);
 
-        }
-        // Fullscreen pipeline 
-        glDisable(GL_DEPTH_TEST);
+    //     // Fullscreen pipeline
+    //     glDisable(GL_DEPTH_TEST);
 
-        // default frame buffer
-        glClearColor(1.0f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    //     // default frame buffer
+    //     glClearColor(1.0f, 0.3f, 0.3f, 1.0f);
+    //     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // draw fullscreenquad
-        glBindVertexArray(fullscreenQuad.vao);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, frameBuffer.color0);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-    }
+    //     // draw fullscreenquad
+    //     glBindVertexArray(fullscreen_quad.vao);
+    //     glActiveTexture(GL_TEXTURE0);
+    //     glBindTexture(GL_TEXTURE_2D, fbo_texture);
+    //     glDrawArrays(GL_TRIANGLES, 0, 6);
+    // }
 }
 
 void Scene::Debug(void)
@@ -356,12 +341,8 @@ void Scene::Debug(void)
 
     ImGui::Checkbox("Paused", &time.paused);
     ImGui::SliderFloat("Time Factor", &time.factor, 0.0f, 10.0f);
+    ImGui::SliderFloat("Width", &settings.spawnArea, 0.0f, 10.0f);
 
-    ImGui::SliderFloat3("Offset", settings.offset, -0.01, 0.1);
-    ImGui::SliderFloat2("R Direction", settings.rDirect, -1.0, 1.0);
-    ImGui::SliderFloat2("G Direction", settings.gDirect, -1.0, 1.0);
-    ImGui::SliderFloat2("B Direction", settings.bDirect, -1.0, 1.0);
-    
     //Imgui::DragFloat("Alpha", &debug.alpha, 1, 100);
     //Imgui::ColorEdit3("Light Color:", &light.color);
 
@@ -388,13 +369,12 @@ void Scene::Debug(void)
         
             ImGui::EndCombo();
     }
-       
+        
     
-    
-    ImGui::Image(
-        (void*)(intptr_t)frameBuffer.color0,
-        ImVec2(400, 300),
-        ImVec2(0, 1), ImVec2(1, 0));
+    // ImGui::Image(
+    //     (void*)(intptr_t)fbo_texture,
+    //     ImVec2(400, 300),
+    //     ImVec2(0, 1), ImVec2(1, 0));
 
     // ImGui::Image(
     //     (void*)(intptr_t)fbo_depth,

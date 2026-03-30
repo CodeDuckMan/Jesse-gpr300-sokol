@@ -12,14 +12,9 @@
 
 enum
 {
-    NoEffect = 0,
-    BlurEffect = 1,
-    InverseEffect = 2,
-    GrayscaleEffect = 3,
-    EdgeEffect = 4,
-    PixelEffect = 5,
-    SharpenEffect = 6,
-    GlitchEffect = 7,
+    DefaultShader = 0,
+    DepthShader = 1,
+    ShadowShader = 2,
 };
 
 struct
@@ -50,14 +45,9 @@ struct
 
     static std::vector<std::string> postProcessingNames =
     {
-        "None",
-        "Blur",
-        "Inverse",
-        "Greyscle",
-        "Edges",
-        "Pixelation",
-        "Sharpen",
-        "Glitch"
+        "Default",
+        "Depth",
+        "Shadow",
     };
 
 struct FullScreenQuad
@@ -160,16 +150,6 @@ void doPostProcess(ew::Shader* shader)
     shader->use();
     shader->setInt("texture0", 0);
 
-    switch (settings.currentPostProc)
-    {
-    case BlurEffect:
-        shader->setFloat("strength", settings.blurStrength);
-        break;
-    
-    default:
-        break;
-    }
-
     // Disable depth test
     glDisable(GL_DEPTH_TEST);
 
@@ -193,20 +173,8 @@ Scene::Scene()
     blinnphong = std::make_unique<ew::Shader>("assets/shaders/blinnphong.vs", "assets/shaders/blinnphong.fs");
     texture = std::make_unique<ew::Texture>("assets/textures/Txo_dokuo.png");
     
-    // blur = std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/blur.fs");
-    // edges = std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/edges.fs");
-    // grescale = std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/greyscale.fs");
-    // inverse = std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/inverse.fs");
-    
     postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/postprocessing/fullscreen.vs", "assets/shaders/postprocessing/default.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/blur.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/inverse.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/greyscale.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/edges.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/pixelation.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/sharpen.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/glitch.fs"));
-    //fullscreen = std::make_unique<ew::Shader>("assets/shaders/fullscreen.vs", "assets/shaders/fullscreen.fs");
+    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/depth.vs", "assets/shaders/depth.fs"));
     
     light = {  
          .color = {1.0f, 0.0f, 2.0f}, 
