@@ -1,405 +1,212 @@
 #include "scene.h"
+
 // imgui
 #include "imgui/imgui.h"
-#include "imguizmo/imguizmo.h"
-
-// glm
-#include "glm/glm.hpp"
-#include "glm/gtc/type_ptr.hpp"
 
 // batteries
+#include "batteries/materials.h"
+#include "batteries/math.h"
 #include "batteries/opengl.h"
 
-enum
+// ew
+#include "ew/procGen.h"
+
+static glm::vec4 light_orbit_radius = {2.0f, 2.0f, -2.0f, 1.0f};
+static const glm::mat4 random_model_matrix = batteries::random_model_matrix(glm::vec3(0.0f));
+
+struct Material
 {
-    NoEffect = 0,
-    BlurEffect = 1,
-    InverseEffect = 2,
-    GrayscaleEffect = 3,
-    EdgeEffect = 4,
-    PixelEffect = 5,
-    SharpenEffect = 6,
-    GlitchEffect = 7,
-};
+    glm::vec3 ambient{1.0f};
+    glm::vec3 diffuse{0.5f};
+    glm::vec3 specular{0.5f};
+    float shininess = 0.5f;
+} material;
+
+struct Depthbuffer
+{
+    GLuint fbo;
+    GLuint depth;
+
+    void Initialize()
+    {
+        glGenFramebuffers(1, &fbo);
+
+        glGenTextures(1, &depth);
+        glBindTexture(GL_TEXTURE_2D, depth);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth, 0);
+
+        glDrawBuffers(0, nullptr);
+        glReadBuffer(GL_NONE);
+
+        // check completeness
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            printf("Not so victorious\n");
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+} depthbuffer;
 
 struct
 {
-    int index = 0;
-    int currentPostProc = 0;
-    float blurStrength = 16.0f;
-
-    float offset[3] = {0.08, 0.06, -0.04};
-    float rDirect[2] = {1.0, 1.0};
-    float gDirect[2] = {1.0, 1.0};
-    float bDirect[2] = {1.0, 1.0};
-    
-    clock_t programStart;
-    struct
-    {
-        glm::vec3 offset = glm::vec3(0.009f, 0.006f, -0.006f);
-        glm::vec2 direction = glm::vec2(1.0f);
-    } chromatic;
-
-    struct
-    {
-        int x = 800;
-        int y = 600;
-    } window;
-
-} settings;
-
-    static std::vector<std::string> postProcessingNames =
-    {
-        "None",
-        "Blur",
-        "Inverse",
-        "Greyscle",
-        "Edges",
-        "Pixelation",
-        "Sharpen",
-        "Glitch"
-    };
-
-struct FullScreenQuad
-{
-    GLuint vao;
-    GLuint vbo;
-
-    void Initialize()
-    {
-        float vertices[] = {
-            // pos (x, y),
-            // texcoord (u, v)
-            // triangle 1
-            -1.0f, 1.0f, 0.0f, 1.0f,   
-            -1.0f, -1.0f, 0.0f, 0.0f,
-            1.0f, -1.0f, 1.0f, 0.0f,
-
-            // triangle 2
-            -1.0f, 1.0f, 0.0f, 1.0f,
-            1.0f, -1.0f, 1.0f, 0.0f,
-            1.0f, 1.0f, 1.0f, 1.0f,
-        };
-
-        glGenVertexArrays(1, &vao);
-        glGenBuffers(1, &vbo);
-
-        glBindVertexArray(vao);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), &vertices, GL_STATIC_DRAW);
-
-        // pos (x, y),
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-
-        // texcoord (u, v)
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(sizeof(float) * 2));
-
-        // always last.
-        glBindVertexArray(0);
-
-    }
-};
-
-FullScreenQuad fullscreenQuad;
-
-struct FrameBuffer
-{
-    GLuint fbo;
-    GLuint color0;
-    GLuint color1;
-    GLuint depth;
-    
-    void Initialize()
-    {
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
-    // create a color attachment texture
-    glGenTextures(1, &color0);
-    glBindTexture(GL_TEXTURE_2D, color0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, settings.window.x, settings.window.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color0, 0);
-    
-    // create a renderbuffer object for depth and stencil attachment (we won't be sampling these)
-    
-    /* old method
-    glGenRenderbuffers(1, &depth);
-    glBindRenderbuffer(GL_RENDERBUFFER, depth);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, settings.window.x, settings.window.y); // use a single renderbuffer object for both a depth AND stencil buffer.
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depth);
-    */
-
-    // new method -> ceate depth as texture
-    
-        glGenTextures(1, &depth);
-        glBindTexture(GL_TEXTURE_2D, depth);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, settings.window.x, settings.window.y, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, depth, 0);
-
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        printf("ERROR::FRAMEBUFFER:: Framebuffer is not complete!");
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
-
-};
-
-FrameBuffer frameBuffer;
-
-void doPostProcess(ew::Shader* shader)
-{
-    shader->use();
-    shader->setInt("texture0", 0);
-
-    switch (settings.currentPostProc)
-    {
-    case BlurEffect:
-        shader->setFloat("strength", settings.blurStrength);
-        break;
-    
-    default:
-        break;
-    }
-
-    // Disable depth test
-    glDisable(GL_DEPTH_TEST);
-
-    // Clear buffer
-    glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // Draw 
-    glBindVertexArray(fullscreenQuad.vao);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, frameBuffer.color0);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-}
-
+    float bias = 0.005f;
+    bool cull_front = false;
+    bool use_pcf = false;
+} debug;
 
 Scene::Scene()
 {
-    
-    settings.programStart = clock();
+    blinnphong = std::make_unique<ew::Shader>("assets/shaders/shadow.vs", "assets/shaders/shadow.fs");
+    depth = std::make_unique<ew::Shader>("assets/shaders/depth.vs", "assets/shaders/depth.fs");
+
     skull = std::make_unique<ew::Model>("assets/models/skull.obj");
-    blinnphong = std::make_unique<ew::Shader>("assets/shaders/blinnphong.vs", "assets/shaders/blinnphong.fs");
     texture = std::make_unique<ew::Texture>("assets/textures/Txo_dokuo.png");
-    
-    // blur = std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/blur.fs");
-    // edges = std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/edges.fs");
-    // grescale = std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/greyscale.fs");
-    // inverse = std::make_unique<ew::Shader>("assets/shaders/PostProcessing/default.vs", "assets/shaders/PostProcessing/inverse.fs");
-    
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/postprocessing/fullscreen.vs", "assets/shaders/postprocessing/default.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/blur.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/inverse.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/greyscale.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/edges.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/pixelation.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/sharpen.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/PostProcessing/fullscreen.vs", "assets/shaders/PostProcessing/glitch.fs"));
-    //fullscreen = std::make_unique<ew::Shader>("assets/shaders/fullscreen.vs", "assets/shaders/fullscreen.fs");
-    
-    light = {  
-         .color = {1.0f, 0.0f, 2.0f}, 
-         .position = {2.0f, 2.0f, 2.0f}, 
-     };
 
-     ambient = {
+    ambient = {
         .intensity = 1.0f,
-        .color = {0.5,0.5,0.5},
-     };
+        .color = {0.5f, 0.5f, 0.5f},
+    };
 
-     
-    
-     // create fbo
-     // https://learnopengl.com/Advanced-OpenGL/Framebuffers
-    //  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, settings.window.x, settings.window.y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-     // Do not Render buffer objects. Create a color texture and then a depth texture
-    //  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, settings.window.x, settings.window.y, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+    light = {
+        .brightness = 1.0f,
+        .color = {0.5f, 0.5f, 0.5f},
+    };
 
-    frameBuffer.Initialize();
-    fullscreenQuad.Initialize();
+    depthbuffer.Initialize();
 
-};
+    planeMesh.load(ew::createPlane(50.0f, 50.0f, 1));
+    // plane.load(ew::createCube(15.0f));
+}
 
 Scene::~Scene()
 {
-    // delete framebuffer
 }
 
 void Scene::Update(float dt)
 {
     batteries::Scene::Update(dt);
-    
-    /* body */
-}
 
+    const auto rym = glm::rotate((float)time.absolute, glm::vec3(0.0f, 1.0f, 0.0f));
+    light.position = rym * light_orbit_radius;
+}
 
 void Scene::Render(void)
 {
     const auto view_proj = camera.Projection() * camera.View();
 
-    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer.fbo);
-    {   // Framebuffer
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    const auto light_proj = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 100.0f);
+    const auto light_view = glm::lookAt(light.position, glm::vec3(0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+    const auto light_view_proj = light_proj * light_view;
 
+    // draw the scene only using the depth buffer
+    glBindFramebuffer(GL_FRAMEBUFFER, depthbuffer.fbo);
+    {
         glEnable(GL_CULL_FACE);
-        glCullFace(GL_BACK);
+        glCullFace(debug.cull_front ? GL_FRONT : GL_BACK);
         glEnable(GL_DEPTH_TEST);
-        // glDisable(GL_DEPTH_TEST);
 
-        // Set Texture
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture->getID());
+        glViewport(0, 0, 1024, 1024);
 
+        glClear(GL_DEPTH_BUFFER_BIT);
 
-        blinnphong->use();
+        depth->use();
 
-        // Sample the texture
-        blinnphong->setInt("texture0", 0);
+        // scene matrices
+        depth->setMat4("model", random_model_matrix);
+        depth->setMat4("light_view_proj", light_view_proj);
 
-        // Scene matrices
-        blinnphong->setMat4("model", glm::mat4(1.0f));
-        blinnphong->setMat4("view_proj", view_proj);
-
-        blinnphong->setVec3("camera_position", camera.position);
-        blinnphong->setVec3("lightPosition", light.position);
-        blinnphong->setVec3("light_color", light.color);
-
-        blinnphong->setVec3("lightStruct.color", light.color);
-        blinnphong->setVec3("lightStruct.position", light.position);
-
-        // Draw
+        // draw scene
         skull->draw();
-
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // Postprocessing
+    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // doPostProcess(postProcessingEffects[settings.currentPostProc].get());
-    
-    // Smaller fullscrean window
-    {
-        auto fullscreen = postProcessingEffects[settings.currentPostProc].get();
-        fullscreen->use();
-        fullscreen->setInt("screen", 0);
-        
-        if (settings.currentPostProc == GlitchEffect) {
-        fullscreen->setFloat("time", (float)time.absolute);
-        fullscreen->setFloat("offsetX", settings.offset[0]);
-        fullscreen->setFloat("offsetY", settings.offset[1]);
-        fullscreen->setFloat("offsetZ", settings.offset[2]);
-        fullscreen->setFloat("rDirectionX", settings.rDirect[0]);
-        fullscreen->setFloat("rDirectionY", settings.rDirect[1]);
-        fullscreen->setFloat("gDirectionX", settings.gDirect[0]);
-        fullscreen->setFloat("gDirectionY", settings.gDirect[1]);
-        fullscreen->setFloat("bDirectionX", settings.bDirect[0]);
-        fullscreen->setFloat("bDirectionY", settings.bDirect[1]);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glEnable(GL_DEPTH_TEST);
 
-        }
-        // Fullscreen pipeline 
-        glDisable(GL_DEPTH_TEST);
+    // reset viewport
+    glViewport(0, 0, sapp_width(), sapp_height());
 
-        // default frame buffer
-        glClearColor(1.0f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    // set bindings
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, depthbuffer.depth);
 
-        // draw fullscreenquad
-        glBindVertexArray(fullscreenQuad.vao);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, frameBuffer.color0);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-    }
+    blinnphong->use();
+
+    // samplers
+    blinnphong->setInt("shadow_map", 0);
+
+    // scene matrices
+    blinnphong->setMat4("model", random_model_matrix);
+    blinnphong->setMat4("view_proj", view_proj);
+    blinnphong->setMat4("light_view_proj", light_view_proj);
+    blinnphong->setVec3("camera_position", camera.position);
+
+    // material properties
+    blinnphong->setVec3("material.ambient", material.ambient);
+    blinnphong->setVec3("material.diffuse", material.diffuse);
+    blinnphong->setVec3("material.specular", material.specular);
+    blinnphong->setFloat("material.shininess", material.shininess);
+
+    // ambient light
+    blinnphong->setFloat("ambient.intensity", ambient.intensity);
+    blinnphong->setVec3("ambient.color", ambient.color);
+
+    // point light
+    blinnphong->setVec3("light.color", light.color);
+    blinnphong->setVec3("light.position", light.position);
+
+    blinnphong->setFloat("bias", debug.bias);
+    blinnphong->setInt("use_pcf", debug.use_pcf);
+
+    // draw suzanne
+    skull->draw();
+
+    // draw plane
+    blinnphong->setMat4("model", glm::translate(glm::vec3(0.0f, -2.0f, 0.0f)));
+    planeMesh.draw();
 }
 
 void Scene::Debug(void)
 {
-    ImGuizmo::BeginFrame();
-    ImGuizmo::SetDrawlist(ImGui::GetBackgroundDrawList());
-    ImGuizmo::SetRect(0, 0, ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
-
-    glm::mat4 m{1.0f};
-    auto *view = glm::value_ptr(camera.View());
-    auto *proj = glm::value_ptr(camera.Projection());
-    
-    auto light_matrix = glm::translate(glm::mat4(1.0f),light.position);
-    
-    ImGuizmo::DrawGrid(view, proj, glm::value_ptr(m), 100.0f);
-
-    ImGuizmo::Manipulate(
-        view,
-        proj,
-        ImGuizmo::TRANSLATE,
-        ImGuizmo::WORLD,
-        glm::value_ptr(light_matrix)
-    );
-
     cameracontroller.Debug();
 
     ImGui::Begin("Controlls", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
-    if(ImGuizmo::IsUsing)
-    {
-        light.position = glm::vec3(light_matrix[3]);
-    }
-
     ImGui::Checkbox("Paused", &time.paused);
     ImGui::SliderFloat("Time Factor", &time.factor, 0.0f, 10.0f);
 
-    ImGui::SliderFloat3("Offset", settings.offset, -0.01, 0.1);
-    ImGui::SliderFloat2("R Direction", settings.rDirect, -1.0, 1.0);
-    ImGui::SliderFloat2("G Direction", settings.gDirect, -1.0, 1.0);
-    ImGui::SliderFloat2("B Direction", settings.bDirect, -1.0, 1.0);
-    
-    //Imgui::DragFloat("Alpha", &debug.alpha, 1, 100);
-    //Imgui::ColorEdit3("Light Color:", &light.color);
+    ImGui::SeparatorText("Shadow Mapping");
+    ImGui::Checkbox("cull_front", &settings.shadow.cull_front);
+    ImGui::Checkbox("use_pcf", &settings.shadow.use_pcf);
+    ImGui::SliderFloat("Bias", &settings.shadow.bias, 0.05f, 0.00f);
 
-    /* build debug ui here */
+    ImGui::SeparatorText("Material");
+    ImGui::SliderFloat3("Ambient", &settings.material.ambient[0], 0.0f, 1.0f);
+    ImGui::SliderFloat3("Diffuse", &settings.material.diffuse[0], 0.0f, 1.0f);
+    ImGui::SliderFloat3("Specular", &settings.material.specular[0], 0.0f, 1.0f);
+    ImGui::SliderFloat("Shininess", &settings.material.shininess, 0.0f, 1.0f);
 
-    if (ImGui::BeginCombo("Effect", postProcessingNames[settings.currentPostProc].c_str()))    
-    {
-            for (auto n = 0; n < postProcessingNames.size(); ++n)
-            {
-                auto is_selected = (postProcessingNames[settings.currentPostProc] == postProcessingNames[n]);
-                
-                if (ImGui::Selectable(postProcessingNames[n].c_str(), is_selected))
-                {
-                    settings.currentPostProc = n;
-                }
-                
-                if (is_selected)
-                {
-                    ImGui::SetItemDefaultFocus();
-                }
-                
-                
-            }
-        
-            ImGui::EndCombo();
-    }
-       
-    
-    
-    ImGui::Image(
-        (void*)(intptr_t)frameBuffer.color0,
-        ImVec2(400, 300),
-        ImVec2(0, 1), ImVec2(1, 0));
+    ImGui::SeparatorText("Ambient");
+    ImGui::SliderFloat("Intensity", &ambient.intensity, 0.0f, 1.0f);
+    ImGui::ColorEdit3("Color", &ambient.color[0]);
 
-    // ImGui::Image(
-    //     (void*)(intptr_t)fbo_depth,
-    //     ImVec2(400, 300),
-    //     ImVec2(0, 1), ImVec2(1, 0));
+    ImVec2 uv_min(0.0f, 1.0f);
+    ImVec2 uv_max(1.0f, 0.0f);
 
-    
+    ImGui::Text("Depth:");
+    ImGui::Image((ImTextureID)(intptr_t)depthBuffer.depth, ImVec2(200, 150), uv_min, uv_max);
+
     ImGui::End();
 }

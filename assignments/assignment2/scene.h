@@ -29,7 +29,6 @@ class Scene final : public batteries::Scene
 
     std::unique_ptr<ew::Shader> blinnphong;
     std::unique_ptr<ew::Shader> depth;
-    std::unique_ptr<ew::Shader> fullscreen; 
 
     batteries::ambient_t ambient;
     batteries::light_t light;
