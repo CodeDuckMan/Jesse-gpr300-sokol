@@ -9,6 +9,7 @@
 #include "ew/model.h"
 #include "ew/shader.h"
 #include "ew/texture.h"
+#include "ew/procGen.h"
 
 #include "batteries/opengl.h"
 
@@ -24,13 +25,14 @@ class Scene final : public batteries::Scene
 
   private:
     std::unique_ptr<ew::Model> skull;
-
     std::unique_ptr<ew::Texture> texture;
 
     std::unique_ptr<ew::Shader> blinnphong;
-    std::unique_ptr<ew::Shader> fullscreen; // Put on timeout for turning the world red
+    std::unique_ptr<ew::Shader> depth;
+    std::unique_ptr<ew::Shader> fullscreen; 
 
-    std::vector<std::unique_ptr<ew::Shader>> postProcessingEffects;
     batteries::ambient_t ambient;
     batteries::light_t light;
+
+    ew::Mesh planeMesh;
 };

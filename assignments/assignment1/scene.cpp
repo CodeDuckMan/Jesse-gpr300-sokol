@@ -100,7 +100,6 @@ struct FullScreenQuad
         // always last.
         glBindVertexArray(0);
 
-
     }
 };
 
@@ -272,7 +271,7 @@ void Scene::Render(void)
         blinnphong->setMat4("model", glm::mat4(1.0f));
         blinnphong->setMat4("view_proj", view_proj);
 
-        blinnphong->setVec3("cameraPosition", camera.position);
+        blinnphong->setVec3("camera_position", camera.position);
         blinnphong->setVec3("lightPosition", light.position);
         blinnphong->setVec3("light_color", light.color);
 

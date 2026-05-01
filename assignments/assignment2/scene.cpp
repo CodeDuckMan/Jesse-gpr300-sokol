@@ -9,6 +9,9 @@
 
 // batteries
 #include "batteries/opengl.h"
+#include "batteries/materials.h"
+#include "batteries/math.h"
+
 
 enum
 {
@@ -22,13 +25,7 @@ struct
     int index = 0;
     int currentPostProc = 0;
     float blurStrength = 16.0f;
-
-    float offset[3] = {0.08, 0.06, -0.04};
-    float rDirect[2] = {1.0, 1.0};
-    float gDirect[2] = {1.0, 1.0};
-    float bDirect[2] = {1.0, 1.0};
     
-    clock_t programStart;
     struct
     {
         glm::vec3 offset = glm::vec3(0.009f, 0.006f, -0.006f);
@@ -41,6 +38,24 @@ struct
         int y = 600;
     } window;
 
+    struct
+    {
+        glm::vec4 lightRadius = {2.0f, 2.0f, -2.0f, 1.0f};
+    } lights;
+
+        
+    struct Material
+    {
+        glm::vec3 ambient{1.0f};
+        glm::vec3 diffuse{0.5f};
+        glm::vec3 specular{0.5f};
+        float shininess = 0.5f;
+    } material;
+
+    float bias = 1.0f;
+    bool cull_front = false;
+    bool use_pcf = false;
+
 } settings;
 
     static std::vector<std::string> postProcessingNames =
@@ -49,6 +64,42 @@ struct
         "Depth",
         "Shadow",
     };
+
+struct DepthBuffer{
+    GLuint fbo;
+    GLuint depth;
+
+    void Initialize(){
+        glGenFramebuffers(1, &fbo);
+        
+        glGenTextures(1, &depth);
+        glBindTexture(GL_TEXTURE_2D, depth);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, settings.window.x, settings.window.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth, 0);
+
+        glDrawBuffers(0, nullptr);
+        glReadBuffer(GL_NONE);
+
+        // Check buffer
+        
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            printf("DepthBuffer failed to initialize\n");
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    }
+
+};
+
+DepthBuffer depthBuffer;
 
 struct FullScreenQuad
 {
@@ -145,39 +196,20 @@ struct FrameBuffer
 
 FrameBuffer frameBuffer;
 
-void doPostProcess(ew::Shader* shader)
-{
-    shader->use();
-    shader->setInt("texture0", 0);
-
-    // Disable depth test
-    glDisable(GL_DEPTH_TEST);
-
-    // Clear buffer
-    glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // Draw 
-    glBindVertexArray(fullscreenQuad.vao);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, frameBuffer.color0);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-}
-
 
 Scene::Scene()
 {
     
-    settings.programStart = clock();
     skull = std::make_unique<ew::Model>("assets/models/skull.obj");
-    blinnphong = std::make_unique<ew::Shader>("assets/shaders/blinnphong.vs", "assets/shaders/blinnphong.fs");
+    blinnphong = std::make_unique<ew::Shader>("assets/shaders/shadow.vs", "assets/shaders/shadow.fs");
+    
     texture = std::make_unique<ew::Texture>("assets/textures/Txo_dokuo.png");
-    
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/postprocessing/fullscreen.vs", "assets/shaders/postprocessing/default.fs"));
-    postProcessingEffects.push_back(std::make_unique<ew::Shader>("assets/shaders/depth.vs", "assets/shaders/depth.fs"));
-    
+    depth = std::make_unique<ew::Shader>("assets/shaders/depth.vs", "assets/shaders/depth.fs");
+
+
     light = {  
-         .color = {1.0f, 0.0f, 2.0f}, 
+         .brightness = 10.0f,
+         .color = {1.0f, 1.0f, 1.0f}, 
          .position = {2.0f, 2.0f, 2.0f}, 
      };
 
@@ -194,9 +226,11 @@ Scene::Scene()
      // Do not Render buffer objects. Create a color texture and then a depth texture
     //  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, settings.window.x, settings.window.y, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
 
-    frameBuffer.Initialize();
+    
+    depthBuffer.Initialize();
     fullscreenQuad.Initialize();
 
+    planeMesh.load(ew::createPlane(500.0f, 500.0f, 1));
 };
 
 Scene::~Scene()
@@ -216,79 +250,91 @@ void Scene::Render(void)
 {
     const auto view_proj = camera.Projection() * camera.View();
 
-    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer.fbo);
-    {   // Framebuffer
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    const auto light_proj = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 100.0f);
+    const auto light_view = glm::lookAt(light.position, glm::vec3(0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+    const auto light_view_proj = light_proj * light_view;
 
+    glBindFramebuffer(GL_FRAMEBUFFER, depthBuffer.fbo);
+    {   
+        // Shadowbuffer
         glEnable(GL_CULL_FACE);
-        glCullFace(GL_BACK);
+        glCullFace(settings.cull_front ? GL_FRONT : GL_BACK);
         glEnable(GL_DEPTH_TEST);
-        // glDisable(GL_DEPTH_TEST);
+            
+        glViewport(0, 0, settings.window.x, settings.window.y);
+        
+        glClear(GL_DEPTH_BUFFER_BIT);
 
-        // Set Texture
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture->getID());
+        depth->use();
 
-
-        blinnphong->use();
-
-        // Sample the texture
-        blinnphong->setInt("texture0", 0);
-
-        // Scene matrices
-        blinnphong->setMat4("model", glm::mat4(1.0f));
-        blinnphong->setMat4("view_proj", view_proj);
-
-        blinnphong->setVec3("cameraPosition", camera.position);
-        blinnphong->setVec3("lightPosition", light.position);
-        blinnphong->setVec3("light_color", light.color);
-
-        blinnphong->setVec3("lightStruct.color", light.color);
-        blinnphong->setVec3("lightStruct.position", light.position);
-
-        // Draw
+        depth->setMat4("model", glm::mat4(1.0f));
+        depth->setMat4("light_view_proj", light_view_proj);
+        
         skull->draw();
-
     }
+        
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // Postprocessing
+    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // doPostProcess(postProcessingEffects[settings.currentPostProc].get());
-    
-    // Smaller fullscrean window
-    {
-        auto fullscreen = postProcessingEffects[settings.currentPostProc].get();
-        fullscreen->use();
-        fullscreen->setInt("screen", 0);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glEnable(GL_DEPTH_TEST);
         
-        if (settings.currentPostProc == GlitchEffect) {
-        fullscreen->setFloat("time", (float)time.absolute);
-        fullscreen->setFloat("offsetX", settings.offset[0]);
-        fullscreen->setFloat("offsetY", settings.offset[1]);
-        fullscreen->setFloat("offsetZ", settings.offset[2]);
-        fullscreen->setFloat("rDirectionX", settings.rDirect[0]);
-        fullscreen->setFloat("rDirectionY", settings.rDirect[1]);
-        fullscreen->setFloat("gDirectionX", settings.gDirect[0]);
-        fullscreen->setFloat("gDirectionY", settings.gDirect[1]);
-        fullscreen->setFloat("bDirectionX", settings.bDirect[0]);
-        fullscreen->setFloat("bDirectionY", settings.bDirect[1]);
+    glViewport(0, 0, sapp_width(), sapp_height());
 
-        }
-        // Fullscreen pipeline 
-        glDisable(GL_DEPTH_TEST);
+    // Set Texture
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, depthBuffer.depth);
 
-        // default frame buffer
-        glClearColor(1.0f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // draw fullscreenquad
-        glBindVertexArray(fullscreenQuad.vao);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, frameBuffer.color0);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-    }
+    blinnphong->use();
+
+    // Sample the texture
+    blinnphong->setInt("shadow_map", 0);
+
+    // Scene matrices
+    blinnphong->setMat4("model",  glm::mat4(1.0f));
+    blinnphong->setMat4("view_proj", view_proj);
+    blinnphong->setMat4("light_view_proj", light_view_proj);
+    blinnphong->setVec3("camera_position", camera.position);
+        
+    blinnphong->setFloat("ambient.intensity", ambient.intensity);
+    blinnphong->setVec3("ambient.color", ambient.color);
+
+    blinnphong->setVec3("light.position", light.position);
+    blinnphong->setVec3("light.color", light.color);
+
+    blinnphong->setFloat("bias", settings.bias);
+    blinnphong->setFloat("use_pcf", settings.use_pcf);
+
+    // Draw
+    blinnphong->setMat4("model", glm::translate(glm::vec3(0.0f, 20.0f, 0.0f)));
+    skull->draw();
+
+    blinnphong->setMat4("model", glm::translate(glm::vec3(0.0f, -20.0f, 0.0f)));
+    planeMesh.draw();
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    
+    // // Smaller fullscrean window
+    // {
+    //     depth->setInt("screen", 0);
+        
+    //     // Fullscreen pipeline 
+    //     glDisable(GL_DEPTH_TEST);
+
+    //     // default frame buffer
+    //     glClearColor(1.0f, 0.3f, 0.3f, 1.0f);
+    //     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    //     // draw fullscreenquad
+    //     glBindVertexArray(fullscreenQuad.vao);
+    //     glActiveTexture(GL_TEXTURE0);
+    //     glBindTexture(GL_TEXTURE_2D, frameBuffer.color0);
+    //     glDrawArrays(GL_TRIANGLES, 0, 6);
+    // }
 }
 
 void Scene::Debug(void)
@@ -324,51 +370,28 @@ void Scene::Debug(void)
 
     ImGui::Checkbox("Paused", &time.paused);
     ImGui::SliderFloat("Time Factor", &time.factor, 0.0f, 10.0f);
-
-    ImGui::SliderFloat3("Offset", settings.offset, -0.01, 0.1);
-    ImGui::SliderFloat2("R Direction", settings.rDirect, -1.0, 1.0);
-    ImGui::SliderFloat2("G Direction", settings.gDirect, -1.0, 1.0);
-    ImGui::SliderFloat2("B Direction", settings.bDirect, -1.0, 1.0);
-    
-    //Imgui::DragFloat("Alpha", &debug.alpha, 1, 100);
-    //Imgui::ColorEdit3("Light Color:", &light.color);
-
     /* build debug ui here */
 
-    if (ImGui::BeginCombo("Effect", postProcessingNames[settings.currentPostProc].c_str()))    
-    {
-            for (auto n = 0; n < postProcessingNames.size(); ++n)
-            {
-                auto is_selected = (postProcessingNames[settings.currentPostProc] == postProcessingNames[n]);
-                
-                if (ImGui::Selectable(postProcessingNames[n].c_str(), is_selected))
-                {
-                    settings.currentPostProc = n;
-                }
-                
-                if (is_selected)
-                {
-                    ImGui::SetItemDefaultFocus();
-                }
-                
-                
-            }
-        
-            ImGui::EndCombo();
-    }
-       
-    
-    
+    ImGui::SeparatorText("Shadow Mapping");
+    ImGui::Checkbox("cull_front", &settings.cull_front);
+    ImGui::Checkbox("use_pcf", &settings.use_pcf);
+    ImGui::SliderFloat("Bias", &settings.bias, 0.05f, 0.00f);
+
+    ImGui::SeparatorText("Material");
+    ImGui::SliderFloat3("Ambient", &settings.material.ambient[0], 0.0f, 1.0f);
+    ImGui::SliderFloat3("Diffuse", &settings.material.diffuse[0], 0.0f, 1.0f);
+    ImGui::SliderFloat3("Specular", &settings.material.specular[0], 0.0f, 1.0f);
+    ImGui::SliderFloat("Shininess", &settings.material.shininess, 0.0f, 1.0f);
+
+    ImGui::SeparatorText("Ambient");
+    ImGui::SliderFloat("Intensity", &ambient.intensity, 0.0f, 1.0f);
+    ImGui::ColorEdit3("Color", &ambient.color[0]);
+
+    ImGui::Text("Depth:");
     ImGui::Image(
-        (void*)(intptr_t)frameBuffer.color0,
+        (ImTextureID)(intptr_t)depthBuffer.depth, 
         ImVec2(400, 300),
         ImVec2(0, 1), ImVec2(1, 0));
 
-    // ImGui::Image(
-    //     (void*)(intptr_t)fbo_depth,
-    //     ImVec2(400, 300),
-    //     ImVec2(0, 1), ImVec2(1, 0));
-
-    
     ImGui::End();
 }

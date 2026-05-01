@@ -56,7 +56,7 @@ vec3 toonShading (vec3 normal, vec3 frag_position, vec3 light_pos) {
 // replace the light_
 
 
-vec3 view_dir = normalize(camera_position - frag_position);
+vec3 view_dir = normalize(_p - frag_position);
 vec3 light_dir = normalize(light_pos - frag_position);
 vec3 half_dir =  normalize(light_dir + view_dir);
 
@@ -77,7 +77,7 @@ return normalize(vec3(PdotL));
 
 
 
-float ndot1 = max
+float ndot1 = max;
 
 void main()
 {

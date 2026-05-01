@@ -71,7 +71,7 @@ void Scene::Render(void)
     water->setMat4("model", glm::mat4(1.0f));
     water->setMat4("view_proj", view_proj);
 
-    water->setVec3("cameraPosition", camera.position);
+    water->setVec3("camera_position", camera.position);
 
     water->setFloat("time", (float)time.absolute);
     water->setVec3("WaterColor", debug.waterColor);

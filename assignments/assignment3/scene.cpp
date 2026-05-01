@@ -174,7 +174,7 @@ void CacheInstanceData()
     {
         for (auto y = -settings.spawnArea; y <= settings.spawnArea; y++, i++)
         {
-            auto position = glm::vec3(x * settings.spacing, 0, y * settings.spacing, 0);
+            auto position = glm::vec3(x * settings.spacing, 0, y * settings.spacing);
             auto matrix = glm::translate(glm::mat4(1.0f), position);
         }
     }
@@ -262,7 +262,7 @@ void Scene::Render(void)
         blinnphong->setMat4("model", glm::mat4(1.0f));
         blinnphong->setMat4("view_proj", view_proj);
 
-        blinnphong->setVec3("cameraPosition", camera.position);
+        blinnphong->setVec3("camera_position", camera.position);
         blinnphong->setVec3("lightPosition", light.position);
         blinnphong->setVec3("light_color", light.color);
 
@@ -277,7 +277,7 @@ void Scene::Render(void)
     {
         for (auto y = -settings.spawnArea; y <= settings.spawnArea; y++, i++)
         {
-            auto position = glm::vec3(x * settings.spacing, 0, y * settings.spacing, 0);
+            auto position = glm::vec3(x * settings.spacing, 0, y * settings.spacing);
             auto matrix = glm::translate(glm::mat4(1.0f), position);
         }
     }

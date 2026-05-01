@@ -11,7 +11,7 @@ in vec2 vs_texcoord;
 
 // uniforms
 uniform sampler2D texture0;
-uniform vec3 cameraPosition;
+uniform vec3 camera_position;
 uniform float time;
 uniform vec3 waterColor;
 

@@ -28,7 +28,7 @@ in vec2 vs_texcoord;
 
 // uniforms
 uniform sampler2D texture0;
-uniform vec3 cameraPosition;
+uniform vec3 camera_position;
 uniform vec3 lightPosition;
 uniform vec3 light_color;
 
@@ -54,42 +54,15 @@ vec3 blinnphong (vec3 normal, vec3 frag_position, vec3 light_pos) {
 
   // Specular
   // Normalise inputs
-  vec3 view_dir = normalize(cameraPosition - frag_position);
+  vec3 view_dir = normalize(camera_position - frag_position);
   vec3 reflect_dir = reflect(light_dir, vs_normal);
 
   // Blinnphong part
   vec3 half_dir = normalize(light_dir + view_dir);
   float spec = pow(max(dot(normal, half_dir), 0.0), 32.0);
 
-  // Stuff from before 
-  // -----------------------------------------------------------------------
-  // Dot products
-  //float nDotL = max(dot(normal, light_dir), 0);
-  //float nDotH = max(dot(normal, half_dir), 0);
-
-  // Iinstead of diffues use material properties
-  // float diffuse = max(dot(normal, light_dir), 0.0);
-  // float specular = vec3(0,0);
-  // float lighting = vec3(diffuse) + vec3(specular);
-  // float lighting = vec3(pow(specular, 128.0));
-  // float lighting = vec3(pow(specular, 128.0));
-
-  // Components
-
-  // vec3 diffuse = (nDotL * material.diffuse);
-  // vec3 specular = pow(ndoth, material.shinniness * 128 ) * material.specular;
-
-  // float PdotL = dot(frag_position, light_pos.xyz);
-  
-
-  // return normalize(vec3(PdotL));
-  // return light_dir_ * light_color;
-  // return vce3(diffuse * light_color);
-
-  // diffuse = NdotL * material.diffuse;
-  // -----------------------------------------------------------------------
-    vec3 specular = vec3(0.3) * spec;
-    return (ambient + diffuse + specular);
+  vec3 specular = vec3(0.3) * spec;
+  return (ambient + diffuse + specular);
 
 }
 

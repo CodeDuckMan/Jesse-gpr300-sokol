@@ -1,16 +1,3 @@
-#version 410
+#version 300 es
 
-out vec4 FragColor;
-
-// varyings
-in vec2 vs_texcord;
-
-// uniforms
-
-uniform sampler2D screen;
-
-void main()
-{
-    vec3 color = texture(screen, vs_texcord).rgb;
-    FragColor = vec4(color, 1.0);
-}
+void main(){}

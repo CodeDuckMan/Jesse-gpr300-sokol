@@ -14,7 +14,7 @@ uniform sampler2D wave_tex;
 uniform sampler2D wave_spec;
 uniform sampler2D wave_warp;
 
-uniform vec3 cameraPosition;
+uniform vec3 camera_position;
 
 uniform float time;
 uniform vec3 waterColor;
@@ -40,7 +40,7 @@ void main()
   vec3 spec = specSample1 + specSample2;
 
   // fresnel
-  float fresnel = dot(normalize(cameraPosition), vec3(0.0, 1.0, 0.0));
+  float fresnel = dot(normalize(camera_position), vec3(0.0, 1.0, 0.0));
 
   const vec3 kbright = vec3(0.299, 0.587, 0.114);
   float brightness = dot(spec, kbright);

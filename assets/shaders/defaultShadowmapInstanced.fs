@@ -77,7 +77,7 @@ return normalize(vec3(PdotL));
 
 
 
-float ndot1 = max
+float ndot1 = max;
 
 void main()
 {
